@@ -24,6 +24,7 @@ INC += localStaticLock.h
 INC += typeCast.h
 INC += printer.h
 INC += sharedVector.h
+INC += vectorAlloc.h
 INC += templateMeta.h
 INC += current_function.h
 
@@ -41,4 +42,5 @@ LIBSRCS += messageQueue.cpp
 LIBSRCS += localStaticLock.cpp
 LIBSRCS += typeCast.cpp
 LIBSRCS += parseToPOD.cpp
-
+LIBSRCS += vectorAlloc.cpp
+LIBSRCS += vectorPool.cpp
