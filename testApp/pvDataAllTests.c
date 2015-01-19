@@ -22,6 +22,7 @@ int testOverrunBitSet(void);
 int testQueue(void);
 int testSerialization(void);
 int testSharedVector(void);
+int testVectorPool(void);
 int testThread(void);
 int testEvent(void);
 int testTimeStamp(void);
@@ -72,6 +73,7 @@ void pvDataAllTests(void)
     runTest(testQueue);
     runTest(testSerialization);
     runTest(testSharedVector);
+    runTest(testVectorPool);
     runTest(testThread);
     runTest(testEvent);
     runTest(testTimeStamp);

@@ -45,6 +45,11 @@ testSharedVector_SRCS += testSharedVector.cpp
 testHarness_SRCS += testSharedVector.cpp
 TESTS += testSharedVector
 
+TESTPROD_HOST += testVectorPool
+testVectorPool_SRCS += testVectorPool.cpp
+testHarness_SRCS += testVectorPool.cpp
+TESTS += testVectorPool
+
 TESTPROD_HOST += testSerialization
 testSerialization_SRCS += testSerialization.cpp
 testHarness_SRCS += testSerialization.cpp
