@@ -26,6 +26,7 @@ static void initPoolSingleton(void*);
 namespace {
 
 typedef epicsGuard<epicsMutex> mutexGuard;
+typedef epicsGuardRelease<epicsMutex> mutexUnguard;
 class default_allocator;
 
 struct free_deleter {void operator()(void* a){free(a);}};
@@ -151,13 +152,17 @@ public:
 
         } else {
             nallocd++;
-            //TODO: release lock?
-            if(zero)
-                A = calloc(elemsize, allocsize);
-            else
-                A = malloc(elemsize*allocsize);
-            if(!A)
+            {
+                mutexUnguard u(g);
+                if(zero)
+                    A = calloc(elemsize, allocsize);
+                else
+                    A = malloc(elemsize*allocsize);
+            }
+            if(!A) {
+                nallocd--;
                 throw std::bad_alloc();
+            }
         }
         shared_vector<void> V(A, freelist_deleter(shared_from_this()), 0, asize);
         ret.swap(V);
