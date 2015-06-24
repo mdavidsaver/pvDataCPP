@@ -158,6 +158,7 @@ class epicsShareClass PVField
 {
 public:
     POINTER_DEFINITIONS(PVField);
+    typedef void is_pvfield;
     /**
      * Constructor
      */
@@ -651,11 +652,35 @@ private:
 namespace detail {
 template<typename T, class E = void>
 struct pvstructAccessHelper {};
+
+// specialization for PVField sub-classes
+template<typename T>
+struct pvstructAccessHelper<T, typename T::is_pvfield>
+{
+    typedef T& return_type;
+    static bool getAs(PVField* pv, T*& val)
+    {
+        T *fld = dynamic_cast<T*>(pv);
+        if(fld) {
+            val = fld;
+        }
+        return fld;
+    }
+    static T& getAs(PVField* pv)
+    {
+        T *fld = dynamic_cast<T*>(pv);
+        if(fld)
+            return *fld;
+        throw std::runtime_error("Field is not of the requested type");
+    }
+};
+
+// specialization for scalar types,
+// ie. those which can be PVScalarValue<T> (or a subclass thereof)
 template<typename T>
 struct pvstructAccessHelper<T, typename is_pvscalar<T>::type>
 {
-    // specialization for scalar types,
-    // ie. those which can be PVScalarValue<T> (or a subclass thereof)
+    typedef T return_type;
     static bool getAs(const PVField* pv, T& val)
     {
         const PVScalar *scalar = dynamic_cast<const PVScalar*>(pv);
@@ -664,12 +689,21 @@ struct pvstructAccessHelper<T, typename is_pvscalar<T>::type>
         }
         return scalar;
     }
+    static T getAs(const PVField* pv)
+    {
+        const PVScalar *scalar = dynamic_cast<const PVScalar*>(pv);
+        if(scalar) {
+            return scalar->getAs<T>();
+        }
+        throw std::runtime_error("Field is not PVScalar");
+    }
 };
+
+// specialization for array types (with the shared_vector)
 template<typename T>
 struct pvstructAccessHelper<shared_vector<const T> >
 {
-    // specialization for array types (with the shared_vector)
-    // Those which can be
+    typedef shared_vector<const T> return_type;
     static bool getAs(const PVField* pv, shared_vector<const T>& val)
     {
         const PVScalarArray *arr = dynamic_cast<const PVScalarArray*>(pv);
@@ -677,6 +711,16 @@ struct pvstructAccessHelper<shared_vector<const T> >
             arr->getAs<T>(val);
         }
         return arr;
+    }
+    static shared_vector<const T> getAs(const PVField* pv)
+    {
+        const PVScalarArray *arr = dynamic_cast<const PVScalarArray*>(pv);
+        if(arr) {
+            shared_vector<const T> val;
+            arr->getAs<T>(val);
+            return val;
+        }
+        throw std::runtime_error("Field is not PVScalarArray");
     }
 };
 }
@@ -749,33 +793,54 @@ private:
 public:
 
     /**
-     * Get a subfield with the specified name.
+     * @brief Get a subfield with the specified name.
+     *
+     * Looks up the requested sub-field (using "child.grandchild" notation).
+     * Handing then depends on the T type parameter.
+     *
+     * If T is a sub-class of PVField (ie. PVInt), then the sub-field is cast to this type
+     * and a reference to this type is returned (eg. 'getAs<PVInt>("...") -> PVInt&')
+     *
+     * If T is a POD type or std::string, the sub-field must be a sub-class of PVScalar.
+     * The result of PVScalar::getAs<T>() is returned.  @note PVScalar::getAs<T>() will perform value conversions.
+     *
+     * If T is a shared_vector of a POD type or std::string, then the sub-field must be a sub-class of PVScalarArray;
+     * A shared_vector<T> populated by PVScalarArray::getAs<T>(...) is returned.
+     *
      * @param name a '.' seperated list of child field names (no whitespace allowed)
-     * @returns A reference to the sub-field (never NULL)
      * @throws std::runtime_error if the requested sub-field doesn't exist, or has a different type
+     * @returns A reference to a the sub-field (when T is a subclass of PVField)
+     * @returns The value of the sub-field converted to the requested type (when T is POD or std::string, or shared_vector of same)
      * @code
      *   PVInt& ref = pvStruct->getAs<PVInt>("substruct.leaffield");
      * @endcode
      */
-    template<typename PVT>
-    PVT& getAs(const char *name) const
+    template<typename T>
+    typename detail::pvstructAccessHelper<T>::return_type
+    getAs(const char *name) const
     {
-        PVT *raw = dynamic_cast<PVT*>(GetAsImpl(name));
-        if(!raw)
-            throw std::runtime_error("Field has wrong type");
-        return *raw;
+        PVField *fld = GetAsImpl(name);
+        return detail::pvstructAccessHelper<T>::getAs(fld);
     }
 
-    template<typename PVT>
-    FORCE_INLINE PVT& getAs(std::string const &fieldName) const
+    template<typename T> FORCE_INLINE
+    typename detail::pvstructAccessHelper<T>::return_type
+    getAs(std::string const &fieldName) const
     {
-        return this->getAs<PVT>(fieldName.c_str());
+        return this->getAs<T>(fieldName.c_str());
     }
 
     /**
-     * Get the value of a sub-field with the specified name.
+     * @brief Get a subfield with the specified name.
+     *
+     * See one argument version for handling of T type parameter.
+     *
+     * This version stores its "return value" in the second argument,
+     * and returns false instead of throwing an exception if the sub-field doesn't exist,
+     * or if the requested conversion isn't possible.
+     *
      * @param name A '.' seperated list of child field names (no whitespace allowed)
-     * @param val  A non-const reference to a value type (POD or shared_vector<T>)
+     * @param val  A non-const reference to a value type (POD, std::string, shared_vector<T>, or PVField sub-class pointer)
      *             where the field value will be stored.
      * @returns true If the field exists, and its value was assigned to 'val'.
      * @returns false If the field does not exist, or its value type is not compatible.  'val' is not modified.

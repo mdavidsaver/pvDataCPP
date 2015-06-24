@@ -597,6 +597,7 @@ static void testFieldAccess()
         PVInt::value_type ival = 0;
         testOk1(fld->getAs<PVInt::value_type>("test", ival)==true);
         testOk1(ival==42);
+        testOk1(fld->getAs<PVInt::value_type>("test")==42);
 
         testOk1(fld->getAs<PVInt::value_type>("invalid", ival)==false);
     }
@@ -606,6 +607,7 @@ static void testFieldAccess()
         std::string sval;
         testOk1(fld->getAs<std::string>("test", sval)==true);
         testOk1(sval=="42");
+        testOk1(fld->getAs<std::string>("test")=="42");
     }
 
     {
@@ -639,7 +641,7 @@ static void testFieldAccess()
 
 MAIN(testPVData)
 {
-    testPlan(245);
+    testPlan(247);
     fieldCreate = getFieldCreate();
     pvDataCreate = getPVDataCreate();
     standardField = getStandardField();
