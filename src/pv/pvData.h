@@ -648,6 +648,39 @@ private:
 };
 
 
+namespace detail {
+template<typename T, class E = void>
+struct pvstructAccessHelper {};
+template<typename T>
+struct pvstructAccessHelper<T, typename is_pvscalar<T>::type>
+{
+    // specialization for scalar types,
+    // ie. those which can be PVScalarValue<T> (or a subclass thereof)
+    static bool getAs(const PVField* pv, T& val)
+    {
+        const PVScalar *scalar = dynamic_cast<const PVScalar*>(pv);
+        if(scalar) {
+            val = scalar->getAs<T>();
+        }
+        return scalar;
+    }
+};
+template<typename T>
+struct pvstructAccessHelper<shared_vector<const T> >
+{
+    // specialization for array types (with the shared_vector)
+    // Those which can be
+    static bool getAs(const PVField* pv, shared_vector<const T>& val)
+    {
+        const PVScalarArray *arr = dynamic_cast<const PVScalarArray*>(pv);
+        if(arr) {
+            arr->getAs<T>(val);
+        }
+        return arr;
+    }
+};
+}
+
 /**
  * @brief Data interface for a structure,
  *
@@ -737,6 +770,38 @@ public:
     FORCE_INLINE PVT& getAs(std::string const &fieldName) const
     {
         return this->getAs<PVT>(fieldName.c_str());
+    }
+
+    /**
+     * Get the value of a sub-field with the specified name.
+     * @param name A '.' seperated list of child field names (no whitespace allowed)
+     * @param val  A non-const reference to a value type (POD or shared_vector<T>)
+     *             where the field value will be stored.
+     * @returns true If the field exists, and its value was assigned to 'val'.
+     * @returns false If the field does not exist, or its value type is not compatible.  'val' is not modified.
+     * @code
+     *   double myval = 42.2;
+     *   // treat 42.2 as a default value
+     *   pvStruct->getAs<double>("fld.name", myval);
+     *   // or act if the field value can't be fetched
+     *   if(!pvStruct->getAs<double>("fld.name", myval)
+     *   { // throw error or compute default value
+     *   }
+     * @endcode
+     */
+    template<typename T>
+    bool getAs(const char *name, T& val) const
+    {
+        try{
+            PVField *fld = GetAsImpl(name);
+            return detail::pvstructAccessHelper<T>::getAs(fld, val);
+        }catch(...) {return false;}
+    }
+
+    template<typename T>
+    FORCE_INLINE bool getAs(std::string const &fieldName, T& val) const
+    {
+        return this->getAs<T>(fieldName.c_str(), val);
     }
 
     /**

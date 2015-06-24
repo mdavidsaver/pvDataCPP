@@ -527,13 +527,14 @@ static void testCopy()
 
 static void testFieldAccess()
 {
-    testDiag("Check methods for accessing structure fields");
+    testDiag("Check methods for accessing structure fields (as PVField sub-class)");
 
     StructureConstPtr tdef = fieldCreate->createFieldBuilder()->
             add("test", pvInt)->
             addNestedStructure("hello")->
               add("world", pvInt)->
             endNested()->
+            addArray("arr", pvInt)->
             createStructure();
 
     PVStructurePtr fld = pvDataCreate->createPVStructure(tdef);
@@ -586,11 +587,59 @@ static void testFieldAccess()
     }catch(std::runtime_error& e){
         testPass("caught expected exception: %s", e.what());
     }
+
+    testDiag("Check methods for directly extracting values from structure fields");
+
+    fld->getAs<PVInt>("test").put(42);
+
+    {
+        // fetch as native type
+        PVInt::value_type ival = 0;
+        testOk1(fld->getAs<PVInt::value_type>("test", ival)==true);
+        testOk1(ival==42);
+
+        testOk1(fld->getAs<PVInt::value_type>("invalid", ival)==false);
+    }
+
+    {
+        // fetch with conversion
+        std::string sval;
+        testOk1(fld->getAs<std::string>("test", sval)==true);
+        testOk1(sval=="42");
+    }
+
+    {
+        // assign array of native type
+        PVIntArray::svector arr(2);
+        arr[0] = 42;
+        arr[1] = 43;
+        fld->getAs<PVIntArray>("arr").putFrom(freeze(arr));
+    }
+
+    {
+        // fetch as native type
+        PVIntArray::const_svector arr;
+
+        testOk1(fld->getAs<PVIntArray::const_svector>("arr", arr)==true);
+        testOk1(arr.size()==2);
+    }
+
+    {
+        // fetch with conversion
+        shared_vector<const double> arr;
+
+        testOk1(fld->getAs<shared_vector<const double> >("arr", arr)==true);
+        testOk1(arr.size()==2);
+        if(arr.size()==2)
+            testOk1(arr[0]==42.0);
+        else
+            testSkip(1, "wrong number of elements");
+    }
 }
 
 MAIN(testPVData)
 {
-    testPlan(235);
+    testPlan(245);
     fieldCreate = getFieldCreate();
     pvDataCreate = getPVDataCreate();
     standardField = getStandardField();

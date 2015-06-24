@@ -1246,6 +1246,23 @@ OP(pvDouble, double)
 OP(pvString, std::string)
 #undef OP
 
+//! Is T one of the pvType scalar value types?
+template<typename T, class R = void> struct is_pvscalar {};
+#define TMOP(TYPE) template<class R> struct is_pvscalar<TYPE,R> {typedef R type;}
+TMOP(boolean);
+TMOP(int8);
+TMOP(int16);
+TMOP(int32);
+TMOP(int64);
+TMOP(uint8);
+TMOP(uint16);
+TMOP(uint32);
+TMOP(uint64);
+TMOP(float);
+TMOP(double);
+TMOP(std::string);
+#undef TMOP
+
 /**
  * @brief Hash a Scalar
  *
