@@ -7,6 +7,7 @@
 /* Author:  Matej Sekoranja Date: 2010.10.18 */
 
 #include <iostream>
+#include <iomanip>
 #include <stddef.h>
 #include <stdlib.h>
 #include <stddef.h>
@@ -14,7 +15,10 @@
 #include <stdio.h>
 #include <sstream>
 
+#include <dbDefs.h>
+
 #include <pv/bitSet.h>
+#include <pv/serializeHelper.h>
 
 #include <epicsUnitTest.h>
 #include <testMain.h>
@@ -155,12 +159,109 @@ static void testOperators()
     testOk(toString(b3) == "{1}", "%s == {1}", toString(b3).c_str());
 }
 
+static void tofrostring(const BitSet& in, const char *expect, size_t elen)
+{
+    {
+        std::vector<epicsUInt8> buf;
+        serializeToVector(&in, EPICS_ENDIAN_BIG, buf);
+
+        std::ostringstream astrm, estrm;
+
+        bool match = buf.size()==elen;
+        if(!match) testDiag("Lengths differ %u != %u", (unsigned)buf.size(), (unsigned)elen);
+        for(size_t i=0, e=std::min(elen, buf.size()); i<e; i++) {
+            astrm<<" "<<std::hex<<std::setfill('0')<<std::setw(2)<<int(buf[i]&0xff);
+            estrm<<" "<<std::hex<<std::setfill('0')<<std::setw(2)<<int(expect[i]&0xff);
+            match &= (buf[i]&0xff)==(expect[i]&0xff);
+            if(buf[i]!=expect[i])
+                testDiag("x %u %02x != %02x", (unsigned)i, buf[i]&0xff, expect[i]&0xff);
+        }
+
+        testDiag("expect %s", estrm.str().c_str());
+        testDiag("actual %s", astrm.str().c_str());
+        testOk(match, "Serialization");
+    }
+
+    {
+        BitSet other;
+        ByteBuffer ebuf((char*)expect, elen, EPICS_ENDIAN_BIG);
+        try{
+            deserializeFromBuffer(&other, ebuf);
+        }catch(std::exception& e){
+            testFail("Exception during deserialization");
+            return;
+        }
+        testOk(ebuf.getRemaining()==0, "buffer remaining 0 == %u", (unsigned)ebuf.getRemaining());
+
+        std::ostringstream astrm, estrm;
+        astrm << other;
+        estrm << in;
+
+        testOk(other==in,"%s == %s", astrm.str().c_str(), estrm.str().c_str());
+    }
+}
+
+static void testSerialize()
+{
+    testDiag("testSerialization");
+
+#define TOFRO(BB, STR) tofrostring(BB, STR, NELEMENTS(STR)-1)
+    {
+        BitSet dut;
+        TOFRO(dut, "\x00"); // zero size
+    }
+    {
+        BitSet dut;
+        dut.set(0);
+        TOFRO(dut, "\x01\x01");
+    }
+    {
+        BitSet dut;
+        dut.set(1);
+        TOFRO(dut, "\x01\x02");
+    }
+    {
+        BitSet dut;
+        dut.set(8);
+        TOFRO(dut, "\x02\x00\x01"); // high 64-bit word always LSB
+    }
+    {
+        BitSet dut;
+        dut.set(55);
+        dut.set(1);
+        TOFRO(dut, "\x07\x02\x00\x00\x00\x00\x00\x80");
+    }
+    {
+        BitSet dut;
+        dut.set(63);
+        dut.set(1);
+        TOFRO(dut, "\x08\x02\x00\x00\x00\x00\x00\x00\x80");
+    }
+    {
+        BitSet dut;
+        dut.set(64);
+        dut.set(63);
+        dut.set(8);
+        dut.set(1);
+        TOFRO(dut, "\x09\x80\x00\x00\x00\x00\x00\x01\x02\x01");
+    }
+    {
+        BitSet dut;
+        dut.set(126);
+        dut.set(64);
+        dut.set(63);
+        dut.set(1);
+        TOFRO(dut, "\x10\x80\x00\x00\x00\x00\x00\x00\x02\x01\x00\x00\x00\x00\x00\x00\x40");
+    }
+#undef TOFRO
+}
 
 MAIN(testBitSet)
 {
     testPlan(30);
     testGetSetClearFlip();
     testOperators();
+    testSerialize();
     return testDone();
 }
 
