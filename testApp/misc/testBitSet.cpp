@@ -139,7 +139,6 @@ static void testOperators()
     testOk1((b1.cardinality() == 2 && b1.get(1) == true && b1.get(256) == true));
     
 
-    testOk1(b1 != b2);
     // assign
     b1 = b2;
     testOk1(b1 == b2);
@@ -252,7 +251,7 @@ static void testSerialize()
 
 MAIN(testBitSet)
 {
-    testPlan(30);
+    testPlan(29);
     testGetSetClearFlip();
     testOperators();
     testSerialize();
