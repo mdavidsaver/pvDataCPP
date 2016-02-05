@@ -240,6 +240,10 @@ namespace epics { namespace pvData {
         /** The internal field corresponding to the serialField "bits". */
         words_t words;
 
+        /** The number of words in the logical size of this BitSet. */
+        uint32 wordsInUse;
+
+
     private:
         /**
          * Sets the field wordsInUse to the logical size in words of the bit set.
