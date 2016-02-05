@@ -25,6 +25,7 @@
  */
 #define ADDRESS_BITS_PER_WORD 6u
 #define BITS_PER_WORD  (1u << ADDRESS_BITS_PER_WORD)
+#define BYTES_PER_WORD sizeof(uint64)
 #define BIT_INDEX_MASK (BITS_PER_WORD - 1u)
 
 /** Used to shift left or right for a partial word mask */
@@ -42,39 +43,30 @@ namespace epics { namespace pvData {
         return BitSet::shared_pointer(new BitSet(nbits));
     }
     
-    BitSet::BitSet() : words(1,0), wordsInUse(0) {}
+    BitSet::BitSet() {}
 
     BitSet::BitSet(uint32 nbits)
-        :words((nbits <= 0) ? 1 : WORD_INDEX(nbits-1) + 1, 0)
-        ,wordsInUse(0)
+        :words((nbits == 0) ? 1 : WORD_INDEX(nbits-1) + 1, 0)
     {}
 
     BitSet::~BitSet() {}
 
     void BitSet::recalculateWordsInUse() {
-        // wordsInUse is unsigned
-        if (wordsInUse == 0)
-            return;
-
-        // Traverse the bitset until a used word is found
-        int32 i;
-        for (i = (int32)wordsInUse-1; i >= 0; i--)
-            if (words[i] != 0)
+        // step back from the end to find the first non-zero element
+        size_t nsize = words.size();
+        for(; nsize; nsize--) {
+            if(words[nsize-1])
                 break;
-
-        wordsInUse = i+1; // The new logical size
+        }
+        words.resize(nsize);
     }
 
     void BitSet::ensureCapacity(uint32 wordsRequired) {
-        words.resize(wordsRequired, 0);
+        words.resize(std::max(words.size(), (size_t)wordsRequired), 0);
     }
 
     void BitSet::expandTo(uint32 wordIndex) {
-        uint32 wordsRequired = wordIndex+1;
-        if (wordsInUse < wordsRequired) {
-            ensureCapacity(wordsRequired);
-            wordsInUse = wordsRequired;
-        }
+        ensureCapacity(wordIndex+1);
     }
 
     void BitSet::flip(uint32 bitIndex) {
@@ -98,7 +90,7 @@ namespace epics { namespace pvData {
     void BitSet::clear(uint32 bitIndex) {
 
         uint32 wordIdx = WORD_INDEX(bitIndex);
-        if (wordIdx >= wordsInUse)
+        if (wordIdx >= words.size())
             return;
 
         words[wordIdx] &= ~(((uint64)1) << WORD_OFFSET(bitIndex));
@@ -115,13 +107,12 @@ namespace epics { namespace pvData {
 
     bool BitSet::get(uint32 bitIndex) const {
         uint32 wordIdx = WORD_INDEX(bitIndex);
-        return ((wordIdx < wordsInUse)
+        return ((wordIdx < words.size())
             && ((words[wordIdx] & (((uint64)1) << WORD_OFFSET(bitIndex))) != 0));
     }
 
     void BitSet::clear() {
-        while (wordsInUse > 0)
-            words[--wordsInUse] = 0;
+        words.clear();
     }
 
     uint32 BitSet::numberOfTrailingZeros(uint64 i) {
@@ -151,7 +142,7 @@ namespace epics { namespace pvData {
     int32 BitSet::nextSetBit(uint32 fromIndex) const {
 
         uint32 u = WORD_INDEX(fromIndex);
-        if (u >= wordsInUse)
+        if (u >= words.size())
             return -1;
 
         uint64 word = words[u] & (WORD_MASK << (fromIndex % BITS_PER_WORD));
@@ -159,7 +150,7 @@ namespace epics { namespace pvData {
         while (true) {
             if (word != 0)
                 return (u * BITS_PER_WORD) + numberOfTrailingZeros(word);
-            if (++u == wordsInUse)
+            if (++u == words.size())
                 return -1;
             word = words[u];
         }
@@ -169,7 +160,7 @@ namespace epics { namespace pvData {
         // Neither spec nor implementation handle bitsets of maximal length.
 
         uint32 u = WORD_INDEX(fromIndex);
-        if (u >= wordsInUse)
+        if (u >= words.size())
             return fromIndex;
 
         uint64 word = ~words[u] & (WORD_MASK << (fromIndex % BITS_PER_WORD));
@@ -177,19 +168,19 @@ namespace epics { namespace pvData {
         while (true) {
             if (word != 0)
                 return (u * BITS_PER_WORD) + numberOfTrailingZeros(word);
-            if (++u == wordsInUse)
-                return wordsInUse * BITS_PER_WORD;
+            if (++u == words.size())
+                return words.size() * BITS_PER_WORD;
             word = ~words[u];
         }
     }
 
     bool BitSet::isEmpty() const {
-        return (wordsInUse == 0);
+        return words.empty();
     }
 
     uint32 BitSet::cardinality() const {
         uint32 sum = 0;
-        for (uint32 i = 0; i < wordsInUse; i++)
+        for (uint32 i = 0; i < words.size(); i++)
             sum += bitCount(words[i]);
         return sum;
     }
@@ -202,14 +193,11 @@ namespace epics { namespace pvData {
         // Check for self-assignment!
         if (this == &set) return *this;
 
-        while (wordsInUse > set.wordsInUse)
-            words[--wordsInUse] = 0;
+        // the result length will be the same as the shorter of the two inputs
+        words.resize(std::min(words.size(), set.words.size()), 0);
 
-        // Perform logical AND on words in common
-        for (uint32 i = 0; i < wordsInUse; i++)
+        for(size_t i=0, e=words.size(); i<e; i++)
             words[i] &= set.words[i];
-
-        recalculateWordsInUse();
 
         return *this;
     }
@@ -217,40 +205,25 @@ namespace epics { namespace pvData {
     BitSet& BitSet::operator|=(const BitSet& set) {
         // Check for self-assignment!
         if (this == &set) return *this;
-        uint32 wordsInCommon = wordsInUse;
-        if(wordsInUse>set.wordsInUse) wordsInCommon = set.wordsInUse;
-        if (wordsInUse < set.wordsInUse) {
-            ensureCapacity(set.wordsInUse);
-            wordsInUse = set.wordsInUse;
-        }
-        // Perform logical OR on words in common
-        for (uint32 i =0; i < wordsInCommon; i++) {
+
+        // result length will be the same as the longer of the two inputs
+        words.resize(std::max(words.size(), set.words.size()), 0);
+
+        // since we expand w/ zeros iterate using the size of the other vector
+        for(size_t i=0, e=set.words.size(); i<e; i++)
             words[i] |= set.words[i];
-         }
-        // Copy any remaining words
-        for(uint32 i=wordsInCommon; i<set.wordsInUse; ++i) {
-            words[i] = set.words[i];
-        }
-        // recalculateWordsInUse() is not needed
+
         return *this;
     }
 
     BitSet& BitSet::operator^=(const BitSet& set) {
-        uint32 wordsInCommon = wordsInUse;
-        if(wordsInUse>set.wordsInUse) wordsInCommon = set.wordsInUse;
-        if (wordsInUse < set.wordsInUse) {
-            ensureCapacity(set.wordsInUse);
-            wordsInUse = set.wordsInUse;
-        }
-        // Perform logical OR on words in common
-        for (uint32 i =0; i < wordsInCommon; i++) {
+        // result length will never be longer than as the longer of the two inputs
+        words.resize(std::max(words.size(), set.words.size()), 0);
+
+        for(size_t i=0, e=set.words.size(); i<e; i++)
             words[i] ^= set.words[i];
-         }
-        // Copy any remaining words
-        for(uint32 i=wordsInCommon; i<set.wordsInUse; ++i) {
-            words[i] = set.words[i];
-        }
-        recalculateWordsInUse();
+
+        recalculateWordsInUse(); // shink to fit
         return *this;
     }
 
@@ -259,28 +232,23 @@ namespace epics { namespace pvData {
         // Check for self-assignment!
         if (this != &set) {
             words = set.words;
-            wordsInUse = set.wordsInUse;
         }
         return *this;
     }
 
     void BitSet::swap(BitSet& set)
     {
-        std::swap(wordsInUse, set.wordsInUse);
         words.swap(set.words);
     }
 
     void BitSet::or_and(const BitSet& set1, const BitSet& set2) {
-        uint32 inUse = (set1.wordsInUse < set2.wordsInUse) ? set1.wordsInUse : set2.wordsInUse;
 
-        ensureCapacity(inUse);
-        wordsInUse = inUse;
+        const size_t andlen = std::min(set1.words.size(), set2.words.size());
+        words.resize(std::max(words.size(), andlen), 0);
 
         // Perform logical AND on words in common
-        for (uint32 i = 0; i < inUse; i++)
+        for (uint32 i = 0; i < andlen; i++)
             words[i] |= (set1.words[i] & set2.words[i]);
-
-        // recalculateWordsInUse()...
     }
 
     bool BitSet::operator==(const BitSet &set) const
@@ -288,11 +256,11 @@ namespace epics { namespace pvData {
         if (this == &set)
             return true;
 
-        if (wordsInUse != set.wordsInUse)
+        if (words.size() != set.words.size())
             return false;
 
         // Check words in use by both BitSets
-        for (uint32 i = 0; i < wordsInUse; i++)
+        for (uint32 i = 0; i < words.size(); i++)
             if (words[i] != set.words[i])
                 return false;
 
@@ -306,12 +274,13 @@ namespace epics { namespace pvData {
 
     void BitSet::serialize(ByteBuffer* buffer, SerializableControl* flusher) const {
     
-        uint32 n = wordsInUse;
+        uint32 n = words.size();
         if (n == 0) {
             SerializeHelper::writeSize(0, buffer, flusher);
             return;
         }
-        uint32 len = 8 * (n-1);
+        uint32 len = BYTES_PER_WORD * (n-1); // length excluding bits in the last word
+        // count non-zero bytes in the last word
         for (uint64 x = words[n - 1]; x != 0; x >>= 8)
             len++;
     
@@ -329,9 +298,8 @@ namespace epics { namespace pvData {
     
         uint32 bytes = static_cast<uint32>(SerializeHelper::readSize(buffer, control));	// in bytes
     
-        wordsInUse = (bytes + 7) / 8;
-        if (wordsInUse > words.size())
-            words.resize(wordsInUse);
+        size_t wordsInUse = (bytes + 7) / BYTES_PER_WORD;
+        words.resize(wordsInUse);
 
         if (wordsInUse == 0)
             return;
