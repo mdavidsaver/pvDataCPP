@@ -19,6 +19,8 @@
 #include <stdexcept>
 #include <sstream>
 
+#include <errlog.h>
+
 #define epicsExportSharedSymbols
 #include <pv/lock.h>
 #include <pv/pvIntrospect.h>
@@ -28,6 +30,23 @@
 using std::tr1::static_pointer_cast;
 using std::size_t;
 using std::string;
+
+static volatile unsigned largest_bitset;
+
+// check for definitions affected by a BitSet serialization issue
+// https://github.com/epics-base/pvDataCPP/issues/24
+static
+void bugCheck(size_t nfields)
+{
+    if(nfields>largest_bitset) {
+        largest_bitset = nfields;
+        errlogPrintf("Info: new max Structure/Union size %u\n", (unsigned)nfields);
+    }
+    if((nfields%64)<56) return;
+    errlogPrintf("Warning: PVStructure/Union with %u fields,\n"
+                 "BitSet serialization compatibility as per to https://github.com/epics-base/pvDataCPP/issues/24\n",
+                 (unsigned)nfields);
+}
 
 namespace epics { namespace pvData {
 
@@ -423,6 +442,7 @@ Structure::Structure (
         THROW_EXCEPTION2(std::invalid_argument, "Can't construct Structure, fieldNames.size()!=fields.size()");
     }
     size_t number = fields.size();
+    bugCheck(number);
     for(size_t i=0; i<number; i++) {
         const string& name = fieldNames[i];
         if(name.empty()) {
@@ -582,6 +602,7 @@ Union::Union (
     }
 
     size_t number = fields.size();
+    bugCheck(number);
     for(size_t i=0; i<number; i++) {
         const string& name = fieldNames[i];
         if(name.empty()) {
