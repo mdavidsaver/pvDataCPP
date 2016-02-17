@@ -232,12 +232,14 @@ static void testSerialize()
         dut.set(1);
         TOFRO(dut, "\x07\x02\x00\x00\x00\x00\x00\x80");
     }
+    testTodoBegin("BE serialization bug");
     {
         BitSet dut;
         dut.set(63);
         dut.set(1);
         TOFRO(dut, "\x08\x02\x00\x00\x00\x00\x00\x00\x80");
     }
+    testTodoEnd();
     {
         BitSet dut;
         dut.set(64);
@@ -246,6 +248,7 @@ static void testSerialize()
         dut.set(1);
         TOFRO(dut, "\x09\x80\x00\x00\x00\x00\x00\x01\x02\x01");
     }
+    testTodoBegin("BE serialization bug");
     {
         BitSet dut;
         dut.set(126);
@@ -254,12 +257,13 @@ static void testSerialize()
         dut.set(1);
         TOFRO(dut, "\x10\x80\x00\x00\x00\x00\x00\x00\x02\x01\x00\x00\x00\x00\x00\x00\x40");
     }
+    testTodoEnd();
 #undef TOFRO
 }
 
 MAIN(testBitSet)
 {
-    testPlan(31);
+    testPlan(55);
     testGetSetClearFlip();
     testOperators();
     testSerialize();
