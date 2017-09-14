@@ -132,7 +132,7 @@ PVFieldPtr PVStructure::getSubFieldImpl(const char *name, bool throws) const
     const char *fullName = name;
     while(true) {
         const char *sep=name;
-        while(*sep!='\0' && *sep!='.' && *sep!=' ') sep++;
+        while(*sep!='\0' && *sep!='.' && *sep!=' ' && *sep!='[') sep++;
         if(*sep==' ')
         {
             if (throws)
@@ -186,6 +186,84 @@ PVFieldPtr PVStructure::getSubFieldImpl(const char *name, bool throws) const
                 return PVFieldPtr();
         }
 
+        if(*sep=='[') {
+            // index structure array
+
+            PVStructureArray *arr = dynamic_cast<PVStructureArray*>(child);
+            if(!arr) {
+                if (throws)
+                {
+                    std::stringstream ss;
+                    ss << "Failed to get field: " << fullName
+                       << " (" << std::string(fullName, sep)
+                       <<  " is not a structure array)";
+                    throw std::runtime_error(ss.str());
+                }
+                else
+                    return PVFieldPtr();
+            }
+
+            sep++; // skip '['
+            bool ok = *sep!=']'; // detects "[]"
+
+            unsigned index = 0;
+
+            // we do our own parsing to avoid making a copy.
+            // only support decimal indices.
+            for(;*sep>='0' && *sep<='9'; sep++) {
+                index = 10*index + *sep - '0';
+            }
+
+            ok &= *sep==']';
+
+            if(!ok) {
+                if (throws)
+                {
+                    std::stringstream ss;
+                    ss << "Failed to get field: " << fullName
+                       << " (" << std::string(fullName, sep)
+                       <<  " structure array syntax error)";
+                    throw std::runtime_error(ss.str());
+                }
+                else
+                    return PVFieldPtr();
+            }
+
+            PVStructureArray::const_svector elems(arr->view());
+            if(index>=elems.size() || !elems[index]) {
+                if (throws)
+                {
+                    std::stringstream ss;
+                    ss << "Failed to get field: " << fullName
+                       << " (" << std::string(fullName, sep)
+                       <<  " structure array index out of range or null)";
+                    throw std::runtime_error(ss.str());
+                }
+                else
+                    return PVFieldPtr();
+            }
+
+            child = elems[index].get();
+
+            sep++; // skip ']'
+
+            if(*sep=='\0' || *sep=='.') {
+                // fall through to treat child as possible sub-structure
+
+            } else {
+                if (throws)
+                {
+                    std::stringstream ss;
+                    ss << "Failed to get field: " << fullName
+                       << " (" << std::string(fullName, sep)
+                       <<  " invalid char after ']')";
+                    throw std::runtime_error(ss.str());
+                }
+                else
+                    return PVFieldPtr();
+            }
+        }
+
         if(*sep) {
             // this is not the requested leaf
             parent = dynamic_cast<PVStructure*>(child);
@@ -202,13 +280,13 @@ PVFieldPtr PVStructure::getSubFieldImpl(const char *name, bool throws) const
                 else
                     return PVFieldPtr();
             }
-            child = NULL;
-            name = sep+1; // skip past '.'
-            // loop around to new parent
 
         } else {
             return child->shared_from_this();
         }
+
+        name = sep+1; // skip past '.'
+        // loop around to new parent
     }
 }
 

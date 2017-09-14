@@ -11,9 +11,9 @@
 #include <string>
 #include <cstdio>
 
-#include <epicsUnitTest.h>
 #include <testMain.h>
 
+#include <pv/pvUnitTest.h>
 #include <pv/pvIntrospect.h>
 #include <pv/pvData.h>
 #include <pv/valueBuilder.h>
@@ -628,6 +628,8 @@ static void testFieldAccess()
 
 static void testSubField()
 {
+    testDiag("testSubField()");
+
     PVStructurePtr value(ValueBuilder()
                          .add<pvInt>("a", 0)
                          .addNested("B")
@@ -663,6 +665,7 @@ static void testSubField()
     SHOW(8);
 #undef SHOW
 
+    // check that consistency between name and index lookup
 #define CHECK(FLD) testOk1(value->getSubFieldT(FLD)==value->getSubFieldT(value->getSubFieldT(FLD)->getFieldOffset()))
     CHECK("a");
     CHECK("B");
@@ -674,11 +677,65 @@ static void testSubField()
     CHECK("z");
 #undef CHECK
 
+    testThrows(std::runtime_error, value->getSubFieldT(""));
+    testThrows(std::runtime_error, value->getSubFieldT("  "));
+    testThrows(std::runtime_error, value->getSubFieldT("a."));
+}
+
+static void testSubFieldArray()
+{
+    testDiag("testSubFieldArray()");
+
+    StructureConstPtr sub(getFieldCreate()->createFieldBuilder()
+                          ->add("X", pvInt)
+                          ->createStructure());
+    StructureConstPtr top(getFieldCreate()->createFieldBuilder()
+                          ->add("A", pvInt)
+                          ->addArray("B", sub)
+                          ->createStructure());
+
+    PVStructurePtr inst(getPVDataCreate()->createPVStructure(top));
+
+    PVStructureArrayPtr B(inst->getSubFieldT<PVStructureArray>("B"));
+    PVStructureArray::const_svector Bmem;
+    {
+        PVStructureArray::svector temp(3);
+        temp[0] = getPVDataCreate()->createPVStructure(sub);
+        // temp[1] left NULL
+        temp[2] = getPVDataCreate()->createPVStructure(sub);
+
+        temp[0]->getSubFieldT<PVScalar>("X")->putFrom(1);
+        temp[2]->getSubFieldT<PVScalar>("X")->putFrom(2);
+        Bmem = freeze(temp);
+    }
+
+    B->replace(Bmem);
+
+    testEqual(inst->getSubFieldT("B").get(), B.get());
+    testEqual(inst->getSubFieldT("B[0]").get(), Bmem[0].get());
+    testEqual(inst->getSubFieldT("B[2]").get(), Bmem[2].get());
+
+    testEqual(inst->getSubFieldT<PVScalar>("B[0].X")->getAs<int32>(), 1);
+    testEqual(inst->getSubFieldT<PVScalar>("B[2].X")->getAs<int32>(), 2);
+
+    // syntax errors
+    testThrows(std::runtime_error, inst->getSubFieldT("B["));
+    testThrows(std::runtime_error, inst->getSubFieldT("B[ "));
+    testThrows(std::runtime_error, inst->getSubFieldT("B[foo"));
+    testThrows(std::runtime_error, inst->getSubFieldT("B[00"));
+    testThrows(std::runtime_error, inst->getSubFieldT("B[0]."));
+
+    // null
+    testThrows(std::runtime_error, inst->getSubFieldT("B[1]"));
+    // out of bounds
+    testThrows(std::runtime_error, inst->getSubFieldT("B[3]"));
+    // not a struct array
+    testThrows(std::runtime_error, inst->getSubFieldT("A[0]"));
 }
 
 MAIN(testPVData)
 {
-    testPlan(251);
+    testPlan(267);
     try{
         fieldCreate = getFieldCreate();
         pvDataCreate = getPVDataCreate();
@@ -693,6 +750,7 @@ MAIN(testPVData)
         testCopy();
         testFieldAccess();
         testSubField();
+        testSubFieldArray();
     }catch(std::exception& e){
         PRINT_EXCEPTION(e);
         testAbort("Unhandled Exception: %s", e.what());
