@@ -129,6 +129,11 @@ PVFieldPtr PVStructure::getSubFieldImpl(const char *name, bool throws) const
         else
             return PVFieldPtr();
     }
+    else if(name[0]=='.' && name[1]=='\0') {
+        // self lookup
+        return std::tr1::const_pointer_cast<PVField>(shared_from_this());
+    }
+
     const char *fullName = name;
     while(true) {
         const char *sep=name;

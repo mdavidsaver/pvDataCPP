@@ -665,7 +665,7 @@ static void testSubField()
     SHOW(8);
 #undef SHOW
 
-    // check that consistency between name and index lookup
+    // check consistency between name and index lookup
 #define CHECK(FLD) testOk1(value->getSubFieldT(FLD)==value->getSubFieldT(value->getSubFieldT(FLD)->getFieldOffset()))
     CHECK("a");
     CHECK("B");
@@ -680,6 +680,9 @@ static void testSubField()
     testThrows(std::runtime_error, value->getSubFieldT(""));
     testThrows(std::runtime_error, value->getSubFieldT("  "));
     testThrows(std::runtime_error, value->getSubFieldT("a."));
+    testThrows(std::runtime_error, value->getSubFieldT(".a"));
+
+    testEqual(value->getSubFieldT<PVStructure>(".").get(), value.get());
 }
 
 static void testSubFieldArray()
@@ -735,7 +738,7 @@ static void testSubFieldArray()
 
 MAIN(testPVData)
 {
-    testPlan(267);
+    testPlan(269);
     try{
         fieldCreate = getFieldCreate();
         pvDataCreate = getPVDataCreate();
