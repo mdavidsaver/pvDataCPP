@@ -44,7 +44,7 @@
  * std::shared_ptr::use_count() gives the number of shared_ptr
  * (strong refs) to the referenced object.
  *
- * If use_count()==5 then epics::debug::shared_ptr::show_refs() will print
+ * If use_count()==5 then epics::debug::shared_ptr::show_referrers() will print
  * 5 lines of the format
  *
  *   # <addr>: <IP0> <IP1> ...
@@ -180,7 +180,7 @@ template<typename T>
 inline std::ostream& operator<<(std::ostream& strm, const ::detail::ref_shower<T>& refs)
 {
 #ifdef HAVE_SHOW_REFS
-    refs.ptr.show_refs(strm, refs.self, refs.weak);
+    refs.ptr.show_referrers(strm, refs.self, refs.weak);
 #endif // HAVE_SHOW_REFS
     return strm;
 }

@@ -10,7 +10,7 @@
 #include <ostream>
 #include <iterator>
 
-#include <epicsUnitTest.h>
+#include <pv/pvUnitTest.h>
 #include <testMain.h>
 
 #if __cplusplus>=201103L
@@ -25,7 +25,7 @@ void show(const epics::debug::shared_ptr_base& ref)
     std::ostringstream strm;
     std::copy(refs.begin(), refs.end(), std::ostream_iterator<const void*>(strm, ", "));
     testDiag("refs: %s", strm.str().c_str());
-    ref.show_refs(std::cout);
+    ref.show_referrers(std::cout);
 }
 
 void testEmpty()
@@ -38,6 +38,67 @@ void testEmpty()
     epics::debug::ptr_base::ref_set_t refs;
     empty.spy_refs(refs);
     testOk1(refs.empty());
+}
+
+void testFromUnique()
+{
+    testDiag("testFromUnique()");
+
+    {
+        std::unique_ptr<int> x(new int(4));
+        epics::debug::shared_ptr<int> four(std::move(x));
+
+        testOk1(!x);
+        testEqual(*four, 4);
+    }
+
+    {
+        std::unique_ptr<int> x(new int(4));
+        epics::debug::shared_ptr<int> four;
+        four = std::move(x);
+
+        testOk1(!x);
+        testEqual(*four, 4);
+    }
+}
+
+struct mylist {
+    typedef epics::debug::shared_ptr<mylist> pointer;
+    pointer next;
+    int v;
+    mylist(int v) :v(v) {}
+};
+
+void testRefersTo()
+{
+    testDiag("testRefersTo()");
+
+    mylist::pointer empty,
+                    head(new mylist(1)),
+                    other(new mylist(10));
+    head->next.reset(new mylist(2));
+    head->next->next.reset(new mylist(3));
+
+    testOk1(!empty.refers_to(0));
+    testOk1(!empty.refers_to(head.get()));
+    testOk1(!other.refers_to(head.get()));
+
+    // refers_to() ignores direct ref (head -> head.get())
+    testOk1(!head.refers_to(head.get()));
+
+    testOk1(head.refers_to(head->next->next.get()));
+
+    testOk1(!head.refers_self());
+
+    head->next->next = head; // makes a ref. loop
+
+    testOk1(!!head.refers_self());
+    testOk1(!!head->next.refers_self());
+    testOk1(!!head->next->next.refers_self());
+
+    head->next.reset(); // break ref loop
+
+    testOk1(!head.refers_self());
 }
 
 void testSimple()
@@ -253,10 +314,12 @@ void testEnableDerv()
 
 MAIN(testDebugPtr)
 {
-    testPlan(48);
+    testPlan(62);
     try {
         testEmpty();
+        testRefersTo();
         testSimple();
+        testFromUnique();
         testCast();
         testWeak();
         testEnable();

@@ -23,7 +23,7 @@
 #include <shareLib.h>
 
 //! User code should test this macro
-//! before calling epics::debug::shared_ptr::show_refs()
+//! before calling epics::debug::shared_ptr::show_referrers()
 #define HAVE_SHOW_REFS
 
 namespace epics {
@@ -42,59 +42,129 @@ protected:
     typedef std::shared_ptr<tracker> track_t;
     track_t track;
 
-    ptr_base() noexcept : track() {}
-    ptr_base(const track_t& track) :track(track) {}
-    ptr_base(const ptr_base&) = delete;
-    ptr_base(ptr_base&&) = delete;
+    // shadow copy of "real" pointer in sub-class
+    // avoids the need for virtual methods in templated sub-class
+    // (a recipe for DLL import/export problems on windows)
+    const char *base;
+    size_t bsize;
 
-    ptr_base& operator=(const ptr_base&) = delete;
+    ptr_base() noexcept :base(0), bsize(0) {}
+
+    ptr_base(const track_t& t, const void *base, size_t bsize)
+        :track(t), base((const char*)base), bsize(bsize)
+    {}
+
+    ptr_base(const void* base, size_t bsize)
+        :base((const char*)base), bsize(bsize)
+    {}
+
+    ptr_base(const ptr_base& o)
+        :track(o.track), base(o.base), bsize(o.bsize)
+    {}
+    ptr_base(ptr_base&& o)
+        :track(std::move(o.track)), base(o.base), bsize(o.bsize)
+    {
+        o.base = 0;
+        o.bsize = 0;
+    }
+
+    ptr_base& operator=(const ptr_base& o) = delete;
+    ptr_base& operator=(ptr_base&& o) = delete;
+
+    void base_assign(const ptr_base& o)
+    {
+        if(this!=&o) {
+            track = o.track;
+            base = o.base;
+            bsize = o.bsize;
+        }
+    }
+
+    void base_move(ptr_base&& o)
+    {
+        if(this!=&o) {
+            track = std::move(o.track);
+            base = o.base;
+            o.base = 0;
+            bsize = o.bsize;
+            o.bsize = 0;
+        }
+    }
+
+    void swap(ptr_base& o)
+    {
+        if(this!=&o) {
+            std::swap(track, o.track);
+            std::swap(base, o.base);
+            std::swap(bsize, o.bsize);
+        }
+    }
 
 public:
+    // show refs which are referred to by our object.
+    // aka shared_ptr contained within our object
+    void show_referents(std::ostream& strm) const;
+
+    // show refs which refer to our object (possibly including me)
+    void show_referrers(std::ostream& strm, bool self=true) const;
+
+    // see if we refer to the given pointer, either directly or indirectly
+    bool refers_to(const void* ptr) const;
+
+    // are we part of a detectable ref. loop
+    inline bool refers_self() const { return refers_to(base); }
+
     typedef std::set<const shared_ptr_base *> ref_set_t;
-    void show_refs(std::ostream&, bool self=true, bool weak=false) const;
     void spy_refs(ref_set_t&) const;
 };
 
 class epicsShareClass weak_ptr_base : public ptr_base {
 protected:
     weak_ptr_base() {}
-    weak_ptr_base(const track_t& track) :ptr_base(track) {}
+    weak_ptr_base(const weak_ptr_base& o) :ptr_base(o) {}
+    weak_ptr_base(const shared_ptr_base& o);
 };
 
 class epicsShareClass shared_ptr_base : public ptr_base {
 protected:
     shared_ptr_base() noexcept
-#ifndef EXCEPT_USE_NONE
-        :m_stack(), m_depth(0)
-#endif
+        :ptr_base()
+        ,m_stack(), m_depth(0)
     {}
-    shared_ptr_base(const track_t& track) :ptr_base(track)
-  #ifndef EXCEPT_USE_NONE
-      ,m_stack(), m_depth(0)
-  #endif
-    {}
-    ~shared_ptr_base() {track_clear();}
 
-    // add ourselves to tracker
-    void track_new();
-    // create new tracker if ptr!=nullptr, otherwise clear
-    void track_new(void* ptr);
-    // copy tracker and add ourself
-    void track_assign(const shared_ptr_base& o);
-    void track_clear();
-    void swap(shared_ptr_base& o);
+    // begin tracking new pointer
+    shared_ptr_base(const void *base, size_t bsize);
+
+    shared_ptr_base(const track_t& t, const void *base, size_t bsize);
+
+    shared_ptr_base(const shared_ptr_base& other);
+    shared_ptr_base(const weak_ptr_base& other);
+
+    shared_ptr_base(shared_ptr_base&& other);
+
+    ~shared_ptr_base();
+
+    void dotrack();
+    void dountrack();
+
+    void base_assign(const ptr_base& o);
+    void base_move(shared_ptr_base&& o);
+
+    void swap(shared_ptr_base &o);
+
+    void reset(const void *ptr, size_t ps);
+
     void snap_stack();
 
-#ifndef EXCEPT_USE_NONE
     void *m_stack[EXCEPT_DEPTH];
     int m_depth; // always <= EXCEPT_DEPTH
-#endif
 
 public:
     void show_stack(std::ostream&) const;
 };
 
 
+inline weak_ptr_base::weak_ptr_base(const shared_ptr_base& o) :ptr_base(o) {}
 
 template<typename T>
 class shared_ptr;
@@ -126,66 +196,67 @@ class shared_ptr : public shared_ptr_base {
 
     // ctor for casts
     shared_ptr(const real_type& r, const ptr_base::track_t& t)
-        :shared_ptr_base(t), real(r)
-    {track_new();}
+        :shared_ptr_base(t, r ? r.get() : 0, sizeof(real_type)), real(r)
+    {}
 public:
     typedef typename real_type::element_type element_type;
     typedef weak_ptr<T> weak_type;
 
     // new NULL
-    shared_ptr() noexcept {}
+    shared_ptr() noexcept :shared_ptr_base(0,0) {}
     // copy existing same type
-    shared_ptr(const shared_ptr& o) :shared_ptr_base(o.track), real(o.real) {track_new();}
+    shared_ptr(const shared_ptr& o) :shared_ptr_base(o), real(o.real) {}
     // copy existing of implicitly castable type
     template<typename A>
-    shared_ptr(const shared_ptr<A>& o) :shared_ptr_base(o.track), real(o.real) {track_new();}
+    shared_ptr(const shared_ptr<A>& o) :shared_ptr_base(o), real(o.real) {}
 
     // construct around new pointer
     template<typename A, class ... Args>
-    explicit shared_ptr(A* a, Args ... args) : shared_ptr_base(), real(a, args...) {
-        track_new(a);
+    explicit shared_ptr(A* a, Args ... args) : shared_ptr_base(a, sizeof(A)), real(a, args...) {
         do_enable_shared_from_this(*this, a);
     }
 
     // make strong ref from weak
     template<typename A>
-    shared_ptr(const weak_ptr<A>& o) :shared_ptr_base(o.track), real(o.real) {track_new();}
+    shared_ptr(const weak_ptr<A>& o)
+        :shared_ptr_base(o), real(o.real)
+    {}
 
     // takeover from unique_ptr
     template<typename A>
-    shared_ptr(std::unique_ptr<A>&& a) : shared_ptr_base(), real(a.release()) {track_new();}
+    shared_ptr(std::unique_ptr<A>&& a) : shared_ptr_base(a.get(), sizeof(A)), real(a.release()) {}
 
     ~shared_ptr() {}
 
     shared_ptr& operator=(const shared_ptr& o) {
         if(this!=&o) {
+            base_assign(o);
             real = o.real;
-            track_assign(o);
         }
         return *this;
     }
     template<typename A>
     shared_ptr& operator=(const shared_ptr<A>& o) {
         if(get()!=o.get()) {
+            base_assign(o);
             real = o.real;
-            track_assign(o);
         }
         return *this;
     }
 
-    void reset() noexcept { real.reset(); track_clear(); }
+    void reset() noexcept { real.reset(); shared_ptr_base::reset(0,0); }
     template<typename A, class ... Args>
     void reset(A* a, Args ... args)
     {
         real.reset(a, args...);
-        track_new(a);
+        shared_ptr_base::reset(a, sizeof(A));
         do_enable_shared_from_this(*this, a);
     }
     void swap(shared_ptr &o) noexcept
     {
         if(this!=&o) {
-            real.swap(o.real);
             shared_ptr_base::swap(o);
+            real.swap(o.real);
         }
     }
 
@@ -256,14 +327,14 @@ public:
     // new NULL
     weak_ptr() noexcept {}
     // copy existing same type
-    weak_ptr(const weak_ptr& o) :weak_ptr_base(o.track), real(o.real) {}
+    weak_ptr(const weak_ptr& o) :weak_ptr_base(o), real(o.real) {}
     // copy existing of similar type
     template<typename A>
-    weak_ptr(const weak_ptr<A>& o) :weak_ptr_base(o.track), real(o.real) {}
+    weak_ptr(const weak_ptr<A>& o) :weak_ptr_base(o), real(o.real) {}
 
     // create week ref from strong ref
     template<typename A>
-    weak_ptr(const shared_ptr<A>& o) :weak_ptr_base(o.track), real(o.real) {}
+    weak_ptr(const shared_ptr<A>& o) :weak_ptr_base(o), real(o.real) {}
 
     ~weak_ptr() {}
 
