@@ -13,9 +13,9 @@
 #include <stdexcept>
 #include <iostream>
 
+#include <pv/templateMeta.h>
 #include <pv/noDefaultMethods.h>
 #include <pv/pvType.h>
-#include <pv/byteBuffer.h>
 #include <pv/serialize.h>
 #include <pv/pvdVersion.h>
 

@@ -15,6 +15,8 @@
 #include <pv/pvData.h>
 #include <pv/factory.h>
 #include <pv/serializeHelper.h>
+#include <pv/epicsException.h>
+#include <pv/byteBuffer.h>
 
 using std::tr1::static_pointer_cast;
 using std::size_t;

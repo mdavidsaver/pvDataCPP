@@ -6,6 +6,9 @@
 #ifndef SHAREDVECTOR_H
 #define SHAREDVECTOR_H
 
+#include <cstdlib>
+#include <cstddef>
+
 #include <ostream>
 #include <algorithm>
 #include <stdexcept>

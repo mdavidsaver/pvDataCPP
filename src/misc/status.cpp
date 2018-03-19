@@ -7,6 +7,7 @@
  *  @author mrk
  */
 #define epicsExportSharedSymbols
+#include <pv/byteBuffer.h>
 #include <pv/epicsException.h>
 #include <pv/serializeHelper.h>
 #include <pv/status.h>

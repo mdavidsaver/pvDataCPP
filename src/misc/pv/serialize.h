@@ -9,9 +9,11 @@
 #ifndef SERIALIZE_H
 #define SERIALIZE_H
 
+#include <vector>
+
 #include <epicsTypes.h>
 
-#include <pv/byteBuffer.h>
+
 #include <pv/sharedPtr.h>
 
 #include <shareLib.h>
@@ -25,6 +27,7 @@ namespace epics { namespace pvData {
     class SerializableArray;
     class BitSet;
     class Field;
+    class ByteBuffer;
 
     /**
      * @brief Callback class for serialization.
@@ -187,13 +190,9 @@ namespace epics { namespace pvData {
      * @param in The input vector
      * @throws std::logic_error if input buffer is too small.  State of S is then undefined.
      */
-    inline void deserializeFromVector(Serializable *S,
+    void deserializeFromVector(Serializable *S,
                                       int byteOrder,
-                                      const std::vector<epicsUInt8>& in)
-    {
-        ByteBuffer B((char*)&in[0], in.size(), byteOrder); // we promise not the modify 'in'
-        deserializeFromBuffer(S, B);
-    }
+                                      const std::vector<epicsUInt8>& in);
 
     /**
      * @brief Class for serializing bitSets.

@@ -266,5 +266,12 @@ namespace epics {
             FromString F(buf);
             S->deserialize(&buf, &F);
         }
+        void deserializeFromVector(Serializable *S,
+                                              int byteOrder,
+                                              const std::vector<epicsUInt8>& in)
+            {
+                ByteBuffer B((char*)&in[0], in.size(), byteOrder); // we promise not the modify 'in'
+                deserializeFromBuffer(S, B);
+            }
     }
 }

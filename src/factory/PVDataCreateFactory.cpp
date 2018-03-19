@@ -22,6 +22,8 @@
 #include <pv/factory.h>
 #include <pv/serializeHelper.h>
 #include <pv/reftrack.h>
+#include <pv/byteBuffer.h>
+#include <pv/epicsException.h>
 
 using std::tr1::static_pointer_cast;
 using std::size_t;

@@ -13,7 +13,6 @@
 #define SERIALIZEHELPER_H_
 
 #include <pv/serialize.h>
-#include <pv/byteBuffer.h>
 #include <pv/noDefaultMethods.h>
 #include <pv/pvIntrospect.h>
 

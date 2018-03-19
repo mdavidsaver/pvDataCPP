@@ -11,6 +11,7 @@
 #include <epicsConvert.h>
 
 #define epicsExportSharedSymbols
+#include <pv/epicsException.h>
 #include "pv/typeCast.h"
 
 using epics::pvData::castUnsafe;

@@ -8,6 +8,7 @@
 #define epicsExportSharedSymbols
 #include <pv/pvData.h>
 #include <pv/valueBuilder.h>
+#include <pv/epicsException.h>
 
 namespace epics{namespace pvData{
 

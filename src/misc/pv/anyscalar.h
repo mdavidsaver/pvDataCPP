@@ -5,6 +5,8 @@
 #  include <type_traits>
 #endif
 
+#include <cstring>
+
 #include <ostream>
 #include <exception>
 #include <map>

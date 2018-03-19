@@ -20,6 +20,7 @@
 #include <pv/bitSet.h>
 #include <pv/serializeHelper.h>
 #include <pv/pvUnitTest.h>
+#include <pv/byteBuffer.h>
 
 #include <epicsUnitTest.h>
 #include <testMain.h>

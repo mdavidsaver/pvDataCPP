@@ -18,6 +18,7 @@
 #include <pv/lock.h>
 #include <pv/serializeHelper.h>
 #include <pv/bitSet.h>
+#include <pv/byteBuffer.h>
 
 /*
  * BitSets are packed into arrays of "words."  Currently a word is

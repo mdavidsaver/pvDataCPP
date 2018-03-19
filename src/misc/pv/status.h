@@ -11,8 +11,8 @@
 
 #include <ostream>
 
+#include <pv/templateMeta.h>
 #include <pv/serialize.h>
-#include <pv/byteBuffer.h>
 #include <pv/sharedPtr.h>
 
 #include <shareLib.h>
