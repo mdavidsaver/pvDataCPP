@@ -316,27 +316,32 @@ void PVStructure::deserialize(ByteBuffer *pbuffer,
 
 std::ostream& PVStructure::dumpValue(std::ostream& o) const
 {
-    o << format::indent() << getStructure()->getID() << ' ' << getFieldName();
-    o << std::endl;
-    {
-    	format::indent_scope s(o);
-
-		PVFieldPtrArray const & fieldsData = getPVFields();
-		if (fieldsData.size() != 0) {
-			size_t length = getStructure()->getNumberFields();
-			for(size_t i=0; i<length; i++) {
-				PVFieldPtr fieldField = fieldsData[i];
-				Type type = fieldField->getField()->getType();
-				if (type == scalar || type == scalarArray)
-					o << format::indent() << fieldField->getField()->getID() << ' ' << fieldField->getFieldName() << ' ' << *(fieldField.get()) << std::endl;
-				else
-					o << *(fieldField.get());
-			}
-		}
-    }
- 	return o;
+    return dumpValue(o, BitSet());
 }
 
+std::ostream& PVStructure::dumpValue(std::ostream& o, const BitSet& changed, bool parent_changed) const
+{
+    bool all_mark = parent_changed || changed.get(getFieldOffset());
+    o << format::indent() << (all_mark ? "X " : "  ") << getStructure()->getID() << ' ' << getFieldName() << '\n';
+    {
+        format::indent_scope s(o);
+
+        PVFieldPtrArray const & fieldsData = getPVFields();
+        for(size_t i=0, N=fieldsData.size(); i<N; i++) {
+            const PVFieldPtr& fieldField = fieldsData[i];
+            bool mark = all_mark || changed.get(fieldField->getFieldOffset());
+            Type type = fieldField->getField()->getType();
+            if (type == scalar || type == scalarArray) {
+                o << format::indent() << (mark ? "X " : "  ") << fieldField->getField()->getID() << ' ' << fieldField->getFieldName() << ' ' << *fieldField << '\n';
+            } else if (type == structure) {
+                static_cast<const PVStructure&>(*fieldField).dumpValue(o, changed);
+            } else {
+                o << *fieldField;
+            }
+        }
+    }
+    return o;
+}
 
 void PVStructure::copy(const PVStructure& from)
 {

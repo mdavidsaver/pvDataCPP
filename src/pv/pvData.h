@@ -881,6 +881,8 @@ public:
 
     virtual std::ostream& dumpValue(std::ostream& o) const OVERRIDE FINAL;
 
+    std::ostream& dumpValue(std::ostream& o, const BitSet& changed, bool parent_changed = false) const;
+
     void copy(const PVStructure& from);
 
     void copyUnchecked(const PVStructure& from);
